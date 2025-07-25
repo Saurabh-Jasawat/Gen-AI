@@ -1,0 +1,149 @@
+//Task 1: Conceptual Questions
+
+1-Difference between RNN and LSTM:
+RNNs maintain a hidden state that captures information from previous time steps, but they struggle with long-term dependencies due to vanishing gradients.
+LSTMs are a special type of RNN that can learn long-term dependencies using gates (input, forget, and output) and a memory cell to regulate information flow.
+
+2-Vanishing Gradient Problem & LSTM Solution:
+In standard RNNs, gradients can shrink drastically during backpropagation, making it hard to learn long sequences.
+LSTM mitigates this using a memory cell and gate mechanisms that allow gradients to flow more easily over long sequences.
+
+3-Purpose of Encoder-Decoder Architecture:
+The encoder-decoder model is used for sequence-to-sequence tasks like translation, where input and output lengths may differ.
+The encoder processes the input sequence into a context vector, which the decoder uses to generate the output sequence.
+
+4-Roles of Encoder and Decoder:
+Encoder: Encodes the input sequence into a fixed-size context vector (or hidden states).
+Decoder: Takes the context and generates the target sequence one token at a time.
+
+5-Attention vs Basic Encoder-Decoder:
+In a basic model, the decoder relies solely on a single context vector from the encoder, which may lose important details.
+Attention allows the decoder to focus on different parts of the input sequence at each decoding step, improving accuracy for longer inputs.
+
+//Task 2: Sequence to sequence data flow
+
+*Input Sequence: A sentence like "How are you?" is tokenized and fed into the encoder.
+*Encoder Hidden States: The LSTM updates its hidden state at each time step based on input and previous state.
+*Context Vector: After the full input is read, the final hidden state becomes the context vector (summarizing the input).
+*Decoder Input: Begins with a start token (<start>) and uses the context vector to start generating the output.
+*Output Sequence: The decoder generates one word at a time until the <end> token is reached.
+
+//Task 3: Data preparation for sequence learning
+Data Prep-
+
+# Sample data loading and preprocessing
+import tensorflow as tf
+import numpy as np
+import re
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# Load and clean data
+lines = open('fra-eng/fra.txt', encoding='utf-8').read().split('\n')
+pairs = [[s for s in l.split('\t')] for l in lines[:30000]]
+
+# Preprocess sentences
+def preprocess_sentence(w):
+    w = w.lower().strip()
+    w = re.sub(r"([?.!,¿])", r" \1 ", w)
+    w = re.sub(r'[" "]+', " ", w)
+    w = '<start> ' + w + ' <end>'
+    return w
+
+input_texts = [preprocess_sentence(pair[0]) for pair in pairs]
+target_texts = [preprocess_sentence(pair[1]) for pair in pairs]
+
+# Tokenize
+input_tokenizer = Tokenizer(filters='')
+input_tokenizer.fit_on_texts(input_texts)
+input_tensor = input_tokenizer.texts_to_sequences(input_texts)
+input_tensor = pad_sequences(input_tensor, padding='post')
+
+target_tokenizer = Tokenizer(filters='')
+target_tokenizer.fit_on_texts(target_texts)
+target_tensor = target_tokenizer.texts_to_sequences(target_texts)
+target_tensor = pad_sequences(target_tensor, padding='post')
+
+//Task 4: Build encoder and decoder using LSTM(keras)
+                
+embedding_dim = 256
+units = 512
+vocab_inp_size = len(input_tokenizer.word_index) + 1
+vocab_tar_size = len(target_tokenizer.word_index) + 1
+
+# Encoder
+encoder_input = tf.keras.Input(shape=(None,))
+x = tf.keras.layers.Embedding(vocab_inp_size, embedding_dim)(encoder_input)
+encoder_output, state_h, state_c = tf.keras.layers.LSTM(units, return_state=True)(x)
+encoder_states = [state_h, state_c]
+
+# Decoder
+decoder_input = tf.keras.Input(shape=(None,))
+x = tf.keras.layers.Embedding(vocab_tar_size, embedding_dim)(decoder_input)
+decoder_lstm = tf.keras.layers.LSTM(units, return_sequences=True, return_state=True)
+decoder_output, _, _ = decoder_lstm(x, initial_state=encoder_states)
+decoder_dense = tf.keras.layers.Dense(vocab_tar_size, activation='softmax')
+decoder_output = decoder_dense(decoder_output)
+
+model = tf.keras.Model([encoder_input, decoder_input], decoder_output)
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy')
+model.summary()
+
+//Task 5:  Inference and Evaluation
+
+BATCH_SIZE = 64
+EPOCHS = 10
+
+# Prepare decoder target (shifted by one)
+target_tensor_input = target_tensor[:, :-1]
+target_tensor_output = target_tensor[:, 1:]
+
+model.fit(
+    [input_tensor, target_tensor_input],
+    tf.expand_dims(target_tensor_output, -1),
+    batch_size=BATCH_SIZE,
+    epochs=EPOCHS
+)
+
+//Task 6: Add Basic Attention Mechanism (Optional – Bonus)
+
+//Task 7: Plotting Loss and Accuracy
+                
+import matplotlib.pyplot as plt
+
+# Assuming saved loss
+plt.plot(history.history['loss'])
+plt.title('Training Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.grid(True)
+plt.show()
+
+Writing Observations-
+Overfitting: Training loss low but poor generalization.
+Underfitting: High training loss, model not learning.
+Stable training: Loss decreases steadily.\
+
+//Task 8: Model Performance Discussion
+
+1-Challenges in Training:
+
+-Long sequences may result in loss of information.
+-Vanishing gradients (solved by LSTM).
+-Limited by dataset quality and size.
+
+2-Bad Translation:
+
+-Missing words, wrong order, or incorrect grammar.
+-Caused by poor attention, small training set, or short context.
+
+3-Improvements:
+
+-Add attention mechanism.
+-Use larger datasets.
+-Increase model depth or add beam search during inference.
+
+
+
+
+
