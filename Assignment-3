@@ -1,0 +1,120 @@
+//Assignment – 3: Retrieval-Augmented Generation (RAG) using LangChain
+
+//Task-1: Short Answer Questions
+
+1. What is the motivation behind Retrieval-Augmented Generation (RAG)?
+-RAG aims to enhance the factual accuracy of language models by combining LLMs with external knowledge sources. It allows models to retrieve relevant information dynamically from a document store or knowledge base, reducing hallucinations and improving contextual relevance.
+
+2. Explain the difference between RAG and standard LLM-based QA.
+-In standard LLM-based QA, answers are generated purely from pre-trained model knowledge, which may be outdated or limited. In RAG, the model first retrieves relevant documents from an external source (like a vector database), then uses those for answer generation — enabling up-to-date and document-grounded responses.
+
+3. What is the role of a vector store in a RAG pipeline?
+-A vector store stores high-dimensional representations (embeddings) of documents. During retrieval, a user query is embedded and matched against the stored vectors to fetch the most semantically similar document chunks that inform the LLM’s answer.
+
+4. Compare “stuff”, “map_reduce”, and “refine” document chain types in LangChain.
+
+-stuff: Concatenates all documents and feeds them into the model in one go. Suitable for small input sizes.
+-map_reduce: Summarizes each chunk separately, then combines summaries into a final answer. Scalable for large texts.
+-refine: Starts with a base answer from the first chunk, then incrementally improves it using the next chunks. Good for iterative refinement.
+
+5. What are the main components of a basic LangChain RAG pipeline?
+
+-Document Loader (e.g., PDF loader)
+-Text Splitter
+-Embedding Generator (e.g., OpenAI, HuggingFace)
+-Vector Store (e.g., FAISS or Chroma)
+-Retriever
+-LLM
+-RetrievalQA Chain
+
+//Task-2: RAG Pipeline Diagram
+
+User Query 
+    ↓
+Retriever
+    ↓
+(Vector Store → retrieves top-k relevant chunks)
+    ↓
+LLM (e.g., Mistral via Ollama)
+    ↓
+Final Answer Generation using retrieved context
+
+//Task-3: Setup LangChain RAG Pipeline
+
+1. Install Requirements
+pip install langchain faiss-cpu openai chromadb pypdf python-dotenv
+
+2. Code: Load, Embed, Store, Retrieve
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings  # Or HuggingFaceEmbeddings
+from langchain.llms import OpenAI
+from langchain.chains import RetrievalQA
+
+# Load PDF
+loader = PyPDFLoader("your_document.pdf")
+documents = loader.load()
+
+# Split text
+splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+docs = splitter.split_documents(documents)
+
+# Generate embeddings
+embedding_model = OpenAIEmbeddings()  # or HuggingFaceEmbeddings()
+vectorstore = FAISS.from_documents(docs, embedding_model)
+
+# Setup retriever
+retriever = vectorstore.as_retriever(search_type="similarity", k=3)
+
+# Load LLM
+llm = OpenAI(temperature=0)  # or load Ollama with LangChain Community if preferred
+
+# Create RAG Chain
+qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+
+//Task-4: Test with Queries
+
+queries = [
+    "What is the main topic of the document?",
+    "Mention any important statistics.",
+    "What methods are discussed?",
+    "Summarize the findings.",
+    "Any recommendations given?"
+]
+
+for query in queries:
+    result = qa_chain(query)
+    print(f"🔎 Query: {query}")
+    print(f"📄 Answer: {result['result']}")
+    print("="*60)
+
+# Without retriever
+print("Answer without retrieval:")
+print(llm("What is the main topic of the document?"))
+
+//Task-5: Customize Prompt Template
+
+from langchain.prompts import PromptTemplate
+from langchain.chains import RetrievalQAWithSourcesChain
+
+prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template="""
+You are a helpful assistant. Use the below context to answer the question.
+Include bullet points, citations (if any), and a short disclaimer if unsure.
+
+Context: {context}
+
+Question: {question}
+
+Answer:
+"""
+)
+
+qa_with_prompt = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=retriever,
+    chain_type="stuff",
+    chain_type_kwargs={"prompt": prompt}
+)
